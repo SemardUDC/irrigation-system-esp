@@ -136,6 +136,44 @@ void loop()
                 mqtt_client.publish("outTopic", "hello world");
                 // ... and resubscribe
                 mqtt_client.subscribe("inTopic");
+                mqtt_client.subscribe("irrigation-system/actuator/solenoid-valve/set");
+                // Callback for managing the activation/deactivation of a solenoid-valve.
+                mqtt_client.setCallback([](char *topic, uint8_t *payload, unsigned int length) {
+                    String solenoid_topic = "irrigation-system/actuator/solenoid-valve/set";
+                    Serial.println("Mensaje recibido para topic: ");
+                    Serial.println(solenoid_topic);
+                    if (solenoid_topic.equals(topic))
+                    {
+                        StaticJsonBuffer<200> jsonBuffer;
+                        JsonObject &message = jsonBuffer.parseObject(payload);
+                        Serial.println("Mensaje recibido:");
+                        String jsonmessage;
+
+                        message.printTo(jsonmessage);
+                        Serial.println(jsonmessage.c_str());
+
+                        if (solenoid1.getPin() == message["identification"])
+                        {
+                            Serial.println("electrovalvula encontrada.");
+                            if (message["state"] == "open")
+                            {
+                                Serial.println("Abriendo electrovalvula.");
+                                solenoid1.abrir(solenoid_callback);
+                            }
+                            else if (message["state"] == "close")
+                            {
+                                Serial.println("Cerrando electrovalvula.");
+                                solenoid1.cerrar(solenoid_callback);
+                            }
+                        }
+                    }
+                    else
+                    {
+                        Serial.print("Topic: ");
+                        Serial.print(topic);
+                        Serial.println(" not contemplated.");
+                    }
+                });
             }
             else
             {
@@ -151,8 +189,6 @@ void loop()
     if (millis() - old_time_test_pcf > 10000)
     {
         old_time_test_pcf = millis();
-        (state_test_pcf) ? solenoid1.abrir(solenoid_callback) : solenoid1.cerrar(solenoid_callback);
-        state_test_pcf = !state_test_pcf;
         // As the ultrsonic sensor obtains the distance
         // parameter directly, is not necessary to handle
         // it every time.
