@@ -43,8 +43,15 @@ void SensorManager::handle()
     {
         _fmeters[i]->handle();
     }
-    for (int i = 0; i < _ultrasonics_current_size; i++)
+
+    static int seconds = 0;
+
+    if (millis() - seconds > 10000)
     {
-        _ultrasonics[i]->handle();
+        seconds = millis();
+        for (int i = 0; i < _ultrasonics_current_size; i++)
+        {
+            _ultrasonics[i]->handle();
+        }
     }
 }
