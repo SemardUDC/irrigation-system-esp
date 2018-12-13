@@ -2,13 +2,16 @@
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
 #include <Arduino.h>
+// I2C components
 #include "PCF8574.h"
+#include "PCF8591.h"
 // Managers
 #include "SensorManager.h"
 #include <ActionManager.h>
 // Sensors
 #include <UltrasonicPCF8574.h>
 #include <FlowMeter.h>
+#include <pH4502c.h>
 // Actuators
 #include <Electrovalvula.h>
 
@@ -25,6 +28,9 @@ PubSubClient mqtt_client(espClient);
 // PCF8574 initialization
 PCF8574 pcf20(0x20, D2, D1);
 
+// PCF8591 initialization
+PCF8591 pcf48(0x48, D2, D1);
+
 // Creates a json message for publishing to a mqtt topic.
 String createJsonMessage(uint8_t identification, char *description, char *key, unsigned int val)
 {
@@ -35,6 +41,7 @@ String createJsonMessage(uint8_t identification, char *description, char *key, u
     root[key] = val;
     String message;
     root.printTo(message);
+    Serial.println(message);
     return message;
 }
 
@@ -69,10 +76,24 @@ void (*flowm_callbacks[FLOW_METERS_SIZE])(unsigned int current_content) = {
 FlowMeter flows[FLOW_METERS_SIZE] = {
     {D5, flowm_callbacks[0]}};
 
+const int PH_METERS_SIZE = 1;
+
+// Array of callbacks for ph-meter sensors
+void (*phmeter_callbacks[PH_METERS_SIZE])(float_t ph_value) = {
+    [](float_t ph_value) {
+        String message = createJsonMessage(0, "Ph_1", "ph", ph_value);
+        mqtt_client.publish("irrigation-system/sensor/ph-meter", message.c_str());
+    }};
+
+// Array of phmeter sensors
+pH4502c phmeters[PH_METERS_SIZE] = {
+    {pcf48, 0, phmeter_callbacks[0]}
+};
+
 // SensorManager object that manages
 // the array of FlowMeter and Ultrasonic
 // sensors.
-SensorManager sensors(flows, FLOW_METERS_SIZE, ultras, ULTRASONICS_SIZE);
+SensorManager sensors(flows, FLOW_METERS_SIZE, ultras, ULTRASONICS_SIZE, phmeters, PH_METERS_SIZE);
 
 // Creates a json message for publishing to a solenoid-valve mqtt topic.
 String createJsonMessage(uint8_t identification, char *description, char *key, bool val)
