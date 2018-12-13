@@ -12,6 +12,7 @@
 #include <UltrasonicPCF8574.h>
 #include <FlowMeter.h>
 #include <pH4502c.h>
+#include <Press.h>
 // Actuators
 #include <Electrovalvula.h>
 
@@ -87,13 +88,31 @@ void (*phmeter_callbacks[PH_METERS_SIZE])(float_t ph_value) = {
 
 // Array of phmeter sensors
 pH4502c phmeters[PH_METERS_SIZE] = {
-    {pcf48, 0, phmeter_callbacks[0]}
-};
+    {pcf48, 0, phmeter_callbacks[0]}};
+
+const int PRESS_SENSORS_SIZE = 2;
+
+// Array of callbacks for pressure sensors
+void (*presssensors_callbacks[PRESS_SENSORS_SIZE])(uint16_t kpa) = {
+    [](uint16_t kpa) {
+        String message = createJsonMessage(1, "Pressure_1", "kpa", kpa);
+        mqtt_client.publish("irrigation-system/sensor/pressure", message.c_str());
+    },
+    [](uint16_t kpa) {
+        String message = createJsonMessage(2, "Pressure_2", "kpa", kpa);
+        mqtt_client.publish("irrigation-system/sensor/pressure", message.c_str());
+    }};
+
+// Array of pressure sensors
+Press press_sensors[PRESS_SENSORS_SIZE] = {
+    {1, pcf48, presssensors_callbacks[0]},
+    {2, pcf48, presssensors_callbacks[1]}};
 
 // SensorManager object that manages
 // the array of FlowMeter and Ultrasonic
 // sensors.
-SensorManager sensors(flows, FLOW_METERS_SIZE, ultras, ULTRASONICS_SIZE, phmeters, PH_METERS_SIZE);
+SensorManager sensors(flows, FLOW_METERS_SIZE, ultras, ULTRASONICS_SIZE,
+                      phmeters, PH_METERS_SIZE, press_sensors, PRESS_SENSORS_SIZE);
 
 // Creates a json message for publishing to a solenoid-valve mqtt topic.
 String createJsonMessage(uint8_t identification, char *description, char *key, bool val)
@@ -138,8 +157,7 @@ SolenoidValve sol_valves[VALVES_SIZE] = {
     {valves[0], *valves_callbacks[0]},
     {valves[1], *valves_callbacks[1]},
     {valves[2], *valves_callbacks[2]},
-    {valves[3], *valves_callbacks[3]}
-};
+    {valves[3], *valves_callbacks[3]}};
 
 // ActionManager object that manages 5 SolenoidValve
 // variables.
@@ -148,6 +166,7 @@ ActionManager actuators(sol_valves, VALVES_SIZE);
 void setup()
 {
     Serial.begin(9600);
+    pcf48.iniciar();
     pcf20.begin();
     // Performs initialization for the sensors that
     // need it.
