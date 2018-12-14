@@ -27,10 +27,10 @@ WiFiClient espClient;
 PubSubClient mqtt_client(espClient);
 
 // PCF8574 initialization
-PCF8574 pcf20(0x20, D2, D1);
+PCF8574 pcf20(0x20, D6, D7, true);
 
 // PCF8591 initialization
-PCF8591 pcf48(0x48, D2, D1);
+PCF8591 pcf48(0x48, D2, D1, true);
 
 // Creates a json message for publishing to a mqtt topic.
 String createJsonMessage(uint8_t identification, char *description, char *key, unsigned int val)
@@ -166,8 +166,8 @@ ActionManager actuators(sol_valves, VALVES_SIZE);
 void setup()
 {
     Serial.begin(9600);
-    pcf48.iniciar();
     pcf20.begin();
+    pcf48.iniciar();
     // Performs initialization for the sensors that
     // need it.
     sensors.begin();
