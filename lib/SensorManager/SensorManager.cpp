@@ -86,7 +86,7 @@ void SensorManager::handle()
         }
         for (int i = 0; i < _phmeters_current_size; i++)
         {
-            _phmeters[i]->lecturaAnalogica();
+            _phmeters[i]->handle();
         }
         for (int i = 0; i < _press_sensors_current_size; i++)
         {
