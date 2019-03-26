@@ -1,6 +1,7 @@
 #include "ActionManager.h"
 
-ActionManager::ActionManager(SolenoidValve valves[], uint8_t valves_size)
+ActionManager::ActionManager(SolenoidValve valves[], uint8_t valves_size, PumpMotor& pumpMotor)
+    : _pumpMotor(pumpMotor)
 {
     for (int i = 0; i < VALVES_MAX_SIZE && i < valves_size; i++)
     {
@@ -25,26 +26,26 @@ void ActionManager::handleValveMessage(char *message)
     if (json_message["identification"].is<int>())
     {
         int identification = json_message["identification"];
-        int index = find(identification);
+        int index = findValve(identification);
 
         if (index == -1)
             return;
         else if (json_message["state"] == "open")
-            open(index);
+            openValve(index);
         else if (json_message["state"] == "close")
-            close(index);
+            closeValve(index);
     }
     else if (json_message["identification"].is<char *>() && 
                 json_message["identification"] == "*")
     {
         if (json_message["state"] == "open")
-            openAll();
+            openAllValves();
         else if (json_message["state"] == "close")
-            closeAll();
+            closeAllValves();
     }
 }
 
-int ActionManager::find(int id)
+int ActionManager::findValve(int id)
 {
     for (int i = 0; i < _valves_current_size; i++)
     {
@@ -57,7 +58,7 @@ int ActionManager::find(int id)
     return -1;
 }
 
-void ActionManager::open(int index)
+void ActionManager::openValve(int index)
 {
     if (index > -1 && index < _valves_current_size)
     {
@@ -66,7 +67,7 @@ void ActionManager::open(int index)
     }
 }
 
-void ActionManager::close(int index)
+void ActionManager::closeValve(int index)
 {
     if (index > -1 && index < _valves_current_size)
     {
@@ -75,18 +76,33 @@ void ActionManager::close(int index)
     }
 }
 
-void ActionManager::openAll()
+void ActionManager::openAllValves()
 {
     for (int i = 0; i < _valves_current_size; i++)
     {
-        open(i);
+        openValve(i);
     }
 }
 
-void ActionManager::closeAll()
+void ActionManager::closeAllValves()
 {
     for (int i = 0; i < _valves_current_size; i++)
     {
-        close(i);
+        closeValve(i);
+    }
+}
+
+void ActionManager::handlePumpMotorMessage(char *message) {
+    StaticJsonBuffer<200> json_buffer;
+    JsonObject &json_message = json_buffer.parseObject(message);
+
+    if (json_message["identification"].is<int>())
+    {
+        int identification = json_message["identification"];
+        
+        if (json_message["state"] == "activate")
+            activatePumpMotor();
+        else if (json_message["state"] == "deactivate")
+            deactivatePumpMotor();
     }
 }

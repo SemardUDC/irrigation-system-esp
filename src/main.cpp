@@ -15,6 +15,7 @@
 #include <Press.h>
 // Actuators
 #include <Electrovalvula.h>
+#include <PumpMotor.h>
 
 // WiFi and MQTT config
 const char *ssid = "............";
@@ -27,7 +28,11 @@ WiFiClient espClient;
 PubSubClient mqtt_client(espClient);
 
 // PCF8574 initialization
-PCF8574 pcf20(0x20, D6, D7, true);
+PCF8574 pcfSolenoidValves(0x20, D6, D7, true);
+
+PCF8574 pcfUltras(0x20, D5, D4, true);
+
+PCF8574 pcfPumpMotor(0x20, D3, D4, true);
 
 // PCF8591 initialization
 PCF8591 pcf48(0x48, D2, D1, true);
@@ -61,8 +66,8 @@ void (*ultrasonic_callbacks[ULTRASONICS_SIZE])(unsigned int current_distance){
 
 // Array of ultrasonic sensors with PCF8574.
 UltrasonicPCF8574 ultras[ULTRASONICS_SIZE] = {
-    {4, 5, 600, ultrasonic_callbacks[0], pcf20},
-    {6, 7, 600, ultrasonic_callbacks[1], pcf20}};
+    {0, 1, 600, ultrasonic_callbacks[0], pcfUltras},
+    {2, 3, 600, ultrasonic_callbacks[1], pcfUltras}};
 
 const int FLOW_METERS_SIZE = 1;
 
@@ -114,7 +119,7 @@ Press press_sensors[PRESS_SENSORS_SIZE] = {
 SensorManager sensors(flows, FLOW_METERS_SIZE, ultras, ULTRASONICS_SIZE,
                       phmeters, PH_METERS_SIZE, press_sensors, PRESS_SENSORS_SIZE);
 
-// Creates a json message for publishing to a solenoid-valve mqtt topic.
+// Creates a json message for publishing to an actuator mqtt topic.
 String createJsonMessage(uint8_t identification, char *description, char *key, bool val)
 {
     StaticJsonBuffer<200> jsonBuffer;
@@ -127,11 +132,15 @@ String createJsonMessage(uint8_t identification, char *description, char *key, b
     return message;
 }
 
-const int VALVES_SIZE = 4;
+const int VALVES_SIZE = 5;
 
 // Array of Electrovalvula objects.
 Electrovalvula valves[VALVES_SIZE] = {
-    {0, pcf20}, {1, pcf20}, {2, pcf20}, {3, pcf20}};
+    {0, pcfSolenoidValves},
+    {1, pcfSolenoidValves},
+    {2, pcfSolenoidValves},
+    {3, pcfSolenoidValves},
+    {4, pcfSolenoidValves}};
 
 // Array of callbacks.
 void (*valves_callbacks[VALVES_SIZE])(uint8_t state) = {
@@ -150,6 +159,10 @@ void (*valves_callbacks[VALVES_SIZE])(uint8_t state) = {
     [](uint8_t state) {
         String message = createJsonMessage(3, "electrovalvula 4", "open", (state ? true : false));
         mqtt_client.publish("irrigation-system/actuator/solenoid-valve/get", message.c_str());
+    },
+    [](uint8_t state){
+        String message = createJsonMessage(4, "electrovalvula 5", "open", (state ? true : false));
+        mqtt_client.publish("irrigation-system/actuator/solenoid-valve/get", message.c_str());
     }};
 
 // Array of SolenoidValve.
@@ -157,16 +170,31 @@ SolenoidValve sol_valves[VALVES_SIZE] = {
     {valves[0], *valves_callbacks[0]},
     {valves[1], *valves_callbacks[1]},
     {valves[2], *valves_callbacks[2]},
-    {valves[3], *valves_callbacks[3]}};
+    {valves[3], *valves_callbacks[3]},
+    {valves[4], *valves_callbacks[4]}};
+
+// PumpMotor
+
+// void (*pump_callback)(uint8_t state) = [](uint8_t state){
+//     String message = createJsonMessage(1, "Motobomba 1", "state", (state ? true : false));
+//     mqtt_client.publish("irrigation-system/actuator/pump-motor/get", message.c_str());
+// }
+
+PumpMotor pumpMotor_1(0, [](uint8_t state) {
+    String message = createJsonMessage(1, "Motobomba 1", "state", (state ? true : false));
+    mqtt_client.publish("irrigation-system/actuator/pump-motor/get", message.c_str());
+}, pcfPumpMotor);
 
 // ActionManager object that manages 5 SolenoidValve
 // variables.
-ActionManager actuators(sol_valves, VALVES_SIZE);
+ActionManager actuators(sol_valves, VALVES_SIZE, pumpMotor_1);
 
 void setup()
 {
     Serial.begin(9600);
-    pcf20.begin();
+    pcfSolenoidValves.begin();
+    pcfUltras.begin();
+    pcfPumpMotor.begin();
     pcf48.iniciar();
     // Performs initialization for the sensors that
     // need it.
@@ -217,6 +245,7 @@ void loop()
                 // Callback for managing the receiving mqtt messages.
                 mqtt_client.setCallback([](char *topic, uint8_t *payload, unsigned int length) {
                     String solenoid_topic = "irrigation-system/actuator/solenoid-valve/set";
+                    String pump_topic = "irrigation-system/actuator/pump-motor/set";
                     Serial.println("Mensaje recibido para topic: ");
                     Serial.println(topic);
                     // Evaluates if the topic for the message received
@@ -224,6 +253,9 @@ void loop()
                     if (solenoid_topic.equals(topic))
                     {
                         actuators.handleValveMessage((char *)payload);
+                    }
+                    else if (pump_topic.equals(topic)) {
+                        actuators.handlePumpMotorMessage((char *) payload);
                     }
                     else
                     {
