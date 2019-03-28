@@ -30,17 +30,17 @@ void ActionManager::handleValveMessage(char *message)
 
         if (index == -1)
             return;
-        else if (json_message["state"] == "open")
+        else if (json_message["action"] == "open")
             openValve(index);
-        else if (json_message["state"] == "close")
+        else if (json_message["action"] == "close")
             closeValve(index);
     }
     else if (json_message["identification"].is<char *>() && 
                 json_message["identification"] == "*")
     {
-        if (json_message["state"] == "open")
+        if (json_message["action"] == "open")
             openAllValves();
-        else if (json_message["state"] == "close")
+        else if (json_message["action"] == "close")
             closeAllValves();
     }
 }
@@ -95,14 +95,17 @@ void ActionManager::closeAllValves()
 void ActionManager::handlePumpMotorMessage(char *message) {
     StaticJsonBuffer<200> json_buffer;
     JsonObject &json_message = json_buffer.parseObject(message);
-
+    
     if (json_message["identification"].is<int>())
-    {
-        int identification = json_message["identification"];
-        
-        if (json_message["state"] == "activate")
+    {        
+        Serial.println("VALIDANDO ACCION");
+        if (json_message["action"] == "activate")
             activatePumpMotor();
-        else if (json_message["state"] == "deactivate")
+        else if (json_message["action"] == "deactivate")
             deactivatePumpMotor();
+    }
+    else 
+    {
+        Serial.println("Identification no es un entero");
     }
 }
