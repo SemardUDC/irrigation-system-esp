@@ -32,7 +32,7 @@ PCF8574 pcfUltras(0x20, D6, D5, true);
 
 PCF8574 pcfSolenoidValves(0x20, D2, D1, true);
 
-//PCF8574 pcfPumpMotor(0x20, D3, D4, true);
+PCF8574 pcfMotors(0x20, D2, D1, true);
 
 // PCF8591 initialization
 PCF8591 pcf48(0x48, D4, D3, true);
@@ -175,26 +175,34 @@ SolenoidValve sol_valves[VALVES_SIZE] = {
 
 // PumpMotor
 
-// void (*pump_callback)(uint8_t state) = [](uint8_t state){
-//     String message = createJsonMessage(1, "Motobomba 1", "state", (state ? true : false));
-//     mqtt_client.publish("irrigation-system/actuator/pump-motor/get", message.c_str());
-// }
+const int MOTORS_SIZE = 2;
 
-PumpMotor pumpMotor_1(5, [](uint8_t state) {
-    String message = createJsonMessage(1, "Motobomba 1", "state", (state ? true : false));
-    mqtt_client.publish("irrigation-system/actuator/pump-motor/get", message.c_str());
-}, pcfSolenoidValves);
+void (*motors_callback[MOTORS_SIZE])(uint8_t state) = {
+    [](uint8_t state) {
+        String message = createJsonMessage(1, "Motobomba 1", "state", (state ? true : false));
+        mqtt_client.publish("irrigation-system/actuator/pump-motor/get", message.c_str());
+    },
+    [](uint8_t state) {
+        String message = createJsonMessage(2, "Motobomba 2", "state", (state ? true : false));
+        mqtt_client.publish("irrigation-system/actuator/pump-motor/get", message.c_str());
+    }
+};
+
+PumpMotor motors[MOTORS_SIZE] = {
+    {5, motors_callback[0], pcfMotors},
+    {6, motors_callback[1], pcfMotors}
+};
 
 // ActionManager object that manages 5 SolenoidValve
 // variables.
-ActionManager actuators(sol_valves, VALVES_SIZE, pumpMotor_1);
+ActionManager actuators(sol_valves, VALVES_SIZE, motors, MOTORS_SIZE);
 
 void setup()
 {
     Serial.begin(9600);
     pcfSolenoidValves.begin();
     pcfUltras.begin();
-    //pcfPumpMotor.begin();
+    pcfMotors.begin();
     pcf48.iniciar();
     // Performs initialization for the sensors that
     // need it.

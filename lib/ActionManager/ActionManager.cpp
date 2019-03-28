@@ -1,12 +1,18 @@
 #include "ActionManager.h"
 
-ActionManager::ActionManager(SolenoidValve valves[], uint8_t valves_size, PumpMotor& pumpMotor)
-    : _pumpMotor(pumpMotor)
+ActionManager::ActionManager(SolenoidValve valves[], uint8_t valves_size, PumpMotor motors[], uint8_t motors_size)
 {
     for (int i = 0; i < VALVES_MAX_SIZE && i < valves_size; i++)
     {
         _valves[i] = &valves[i];
         _valves_current_size++;
+    }
+
+    for (int i = 0; i < MOTORS_MAX_SIZE && i < motors_size; i++)
+    {
+        Serial.println("Motor agregado");
+        _motors[i] = &motors[i];
+        _motors_current_size++;
     }
 }
 
@@ -15,6 +21,11 @@ ActionManager::~ActionManager()
     for (int i = 0; i < _valves_current_size; i++)
     {
         delete _valves[i];
+    }
+
+    for (int i = 0; i < _motors_current_size; i++)
+    {
+        delete _motors[i];
     }
 }
 
@@ -35,8 +46,8 @@ void ActionManager::handleValveMessage(char *message)
         else if (json_message["action"] == "close")
             closeValve(index);
     }
-    else if (json_message["identification"].is<char *>() && 
-                json_message["identification"] == "*")
+    else if (json_message["identification"].is<char *>() &&
+             json_message["identification"] == "*")
     {
         if (json_message["action"] == "open")
             openAllValves();
@@ -92,20 +103,73 @@ void ActionManager::closeAllValves()
     }
 }
 
-void ActionManager::handlePumpMotorMessage(char *message) {
+void ActionManager::handlePumpMotorMessage(char *message)
+{
     StaticJsonBuffer<200> json_buffer;
     JsonObject &json_message = json_buffer.parseObject(message);
-    
+
     if (json_message["identification"].is<int>())
-    {        
-        Serial.println("VALIDANDO ACCION");
-        if (json_message["action"] == "activate")
-            activatePumpMotor();
-        else if (json_message["action"] == "deactivate")
-            deactivatePumpMotor();
-    }
-    else 
     {
-        Serial.println("Identification no es un entero");
+        int identification = json_message["identification"];
+        int index = findMotor(identification);
+
+        Serial.println("Indice para");
+        Serial.println(identification);
+        Serial.println("es");
+        Serial.println(index);
+
+
+        if (index == -1)
+            return;
+        else if (json_message["action"] == "activate")
+            activateMotor(index);
+        else if (json_message["action"] == "deactivate")
+            deactivateMotor(index);
     }
+    else if (json_message["identification"].is<char *>() &&
+             json_message["identification"] == "*")
+    {
+        if (json_message["action"] == "activate")
+            activateAllMotors();
+        else if (json_message["action"] == "deactivate")
+            deactivateAllMotors();
+    }
+}
+
+int ActionManager::findMotor(int id)
+{
+    for (int i = 0; i < _motors_current_size; i++)
+    {
+        if (_motors[i]->getPin() == id)
+            return i;
+    }
+    return -1;
+}
+
+void ActionManager::activateAllMotors()
+{
+    for (int i = 0; i < _motors_current_size; i++)
+    {
+        activateMotor(i);
+    }
+}
+
+void ActionManager::deactivateAllMotors()
+{
+    for (int i = 0; i < _motors_current_size; i++)
+    {
+        deactivateMotor(i);
+    }
+}
+
+void ActionManager::activateMotor(int index)
+{
+    if (index > -1 && index < _motors_current_size)
+        _motors[index]->activate();
+}
+
+void ActionManager::deactivateMotor(int index)
+{
+    if (index > -1 && index < _motors_current_size)
+        _motors[index]->deactivate();
 }

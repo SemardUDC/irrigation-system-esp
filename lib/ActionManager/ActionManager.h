@@ -20,8 +20,9 @@ class ActionManager
 {
 public:
   const static uint8_t VALVES_MAX_SIZE = 6;
+  const static uint8_t MOTORS_MAX_SIZE = 3;
 
-  ActionManager(SolenoidValve valves[], uint8_t valves_size, PumpMotor& pumpMotor);
+  ActionManager(SolenoidValve valves[], uint8_t valves_size, PumpMotor motors[], uint8_t motors_size);
   ~ActionManager();
   void handleValveMessage(char *message);
   void handlePumpMotorMessage(char *message);
@@ -29,7 +30,9 @@ public:
 private:
   SolenoidValve *_valves[VALVES_MAX_SIZE];
   uint8_t _valves_current_size;
-  PumpMotor _pumpMotor;
+
+  PumpMotor *_motors[MOTORS_MAX_SIZE];
+  uint8_t _motors_current_size;
 
   int findValve(int id);
   void openValve(int index);
@@ -37,8 +40,11 @@ private:
   void openAllValves();
   void closeAllValves();
 
-  inline void activatePumpMotor() { _pumpMotor.activate(); };
-  inline void deactivatePumpMotor() { _pumpMotor.deactivate(); };
+  int findMotor(int id);
+  void activateMotor(int index);
+  void deactivateMotor(int index);
+  void activateAllMotors();
+  void deactivateAllMotors();
 };
 
 #endif
