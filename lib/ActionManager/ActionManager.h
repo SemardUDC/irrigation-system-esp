@@ -7,6 +7,7 @@
 
 // Struct that maps an Electrovalvula object with a callback function.
 // Since Electrovalvula doesn't store a callback as a field member,
+
 // the easier way to handle callback invokation is with a SolenoidValve struct.
 struct SolenoidValve
 {
@@ -14,6 +15,7 @@ struct SolenoidValve
   void (&_callback)(uint8_t state);
 
   SolenoidValve(Electrovalvula &valve, void (&callback)(uint8_t state)) : _valve(valve), _callback(callback) {}
+
 };
 
 class ActionManager
@@ -26,6 +28,7 @@ public:
   ~ActionManager();
   void handleValveMessage(char *message);
   void handlePumpMotorMessage(char *message);
+
 
 private:
   SolenoidValve *_valves[VALVES_MAX_SIZE];

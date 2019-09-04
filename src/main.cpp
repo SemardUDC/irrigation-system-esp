@@ -6,6 +6,7 @@
 #include "PCF8574.h"
 #include "PCF8591.h"
 // Managers
+#include <ActionManager.h>
 #include "SensorManager.h"
 #include <ActionManager.h>
 // Sensors
@@ -18,11 +19,11 @@
 #include <PumpMotor.h>
 
 // WiFi and MQTT config
-const char *ssid = "SEMARD";
-const char *password = "SEMARD123";
-const char *mqtt_server = "m15.cloudmqtt.com";
-const char *mqtt_username = "crpccsnj";
-const char *mqtt_password = "hZ5N5ca3F07r";
+const char *ssid = "..........";
+const char *password = ".........";
+const char *mqtt_server = "..........";
+const char *mqtt_username = ".........";
+const char *mqtt_password = "............";
 
 WiFiClient espClient;
 PubSubClient mqtt_client(espClient);
@@ -36,6 +37,68 @@ PCF8574 pcfMotors(0x20, D2, D1, true);
 
 // PCF8591 initialization
 PCF8591 pcf48(0x48, D4, D3, true);
+
+
+// Tests the PCF by blinking a LED
+// every second.
+int old_time_test_pcf = 0;
+bool state_test_pcf = true;
+const uint8_t pin_test_pcf = 3;
+
+// Creates a json message for publishing to a solenoid-valve mqtt topic.
+String createJsonMessage(uint8_t identification, char *description, char *key, bool val)
+{
+    StaticJsonBuffer<200> jsonBuffer;
+    JsonObject &root = jsonBuffer.createObject();
+    root["identification"] = identification;
+    root["description"] = description;
+    root[key] = val;
+    String message;
+    root.printTo(message);
+    return message;
+}
+
+const int VALVES_SIZE = 5;
+
+// Array of Electrovalvula objects.
+Electrovalvula valves[VALVES_SIZE] = {
+    {0, pcf20}, {1, pcf20}, {2, pcf20}, {3, pcf20}, {4, pcf20}};
+
+// Array of callbacks.
+void (*valves_callbacks[VALVES_SIZE])(uint8_t state) = {
+    [](uint8_t state) {
+        String message = createJsonMessage(0, "electrovalvula 1", "open", (state ? true : false));
+        mqtt_client.publish("irrigation-system/actuator/solenoid-valve/get", message.c_str());
+    },
+    [](uint8_t state) {
+        String message = createJsonMessage(1, "electrovalvula 2", "open", (state ? true : false));
+        mqtt_client.publish("irrigation-system/actuator/solenoid-valve/get", message.c_str());
+    },
+    [](uint8_t state) {
+        String message = createJsonMessage(2, "electrovalvula 3", "open", (state ? true : false));
+        mqtt_client.publish("irrigation-system/actuator/solenoid-valve/get", message.c_str());
+    },
+    [](uint8_t state) {
+        String message = createJsonMessage(3, "electrovalvula 4", "open", (state ? true : false));
+        mqtt_client.publish("irrigation-system/actuator/solenoid-valve/get", message.c_str());
+    },
+    [](uint8_t state) {
+        String message = createJsonMessage(4, "electrovalvula 5", "open", (state ? true : false));
+        mqtt_client.publish("irrigation-system/actuator/solenoid-valve/get", message.c_str());
+    }};
+
+// Array of SolenoidValve.
+SolenoidValve sol_valves[VALVES_SIZE] = {
+    {valves[0], *valves_callbacks[0]},
+    {valves[1], *valves_callbacks[1]},
+    {valves[2], *valves_callbacks[2]},
+    {valves[3], *valves_callbacks[3]},
+    {valves[4], *valves_callbacks[4]}
+};
+
+// ActionManager object that manages 5 SolenoidValve
+// variables.
+ActionManager actuators(sol_valves, VALVES_SIZE);
 
 // Creates a json message for publishing to a mqtt topic.
 String createJsonMessage(uint8_t identification, char *description, char *key, unsigned int val)
@@ -255,6 +318,7 @@ void loop()
                 mqtt_client.setCallback([](char *topic, uint8_t *payload, unsigned int length) {
                     String solenoid_topic = "irrigation-system/actuator/solenoid-valve/set";
                     String pump_topic = "irrigation-system/actuator/pump-motor/set";
+
                     Serial.println("Mensaje recibido para topic: ");
                     Serial.println(topic);
                     // Evaluates if the topic for the message received
@@ -263,6 +327,7 @@ void loop()
                         actuators.handleValveMessage((char *)payload);                    
                     else if (pump_topic.equals(topic)) 
                         actuators.handlePumpMotorMessage((char *) payload);                    
+
                     else
                     {
                         Serial.print("Topic: ");

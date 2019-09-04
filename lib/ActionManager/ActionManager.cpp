@@ -1,5 +1,6 @@
 #include "ActionManager.h"
 
+
 ActionManager::ActionManager(SolenoidValve valves[], uint8_t valves_size, PumpMotor motors[], uint8_t motors_size)
 {
     for (int i = 0; i < VALVES_MAX_SIZE && i < valves_size; i++)
@@ -69,6 +70,7 @@ int ActionManager::findValve(int id)
     return -1;
 }
 
+
 void ActionManager::openValve(int index)
 {
     if (index > -1 && index < _valves_current_size)
@@ -77,6 +79,7 @@ void ActionManager::openValve(int index)
         target_valve._valve.abrir(target_valve._callback);
     }
 }
+
 
 void ActionManager::closeValve(int index)
 {
