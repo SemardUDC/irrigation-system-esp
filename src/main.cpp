@@ -3,6 +3,8 @@
 #include <ArduinoJson.h>
 #include <Arduino.h>
 #include "PCF8574.h"
+// Managers
+#include "SensorManager.h"
 // Sensors
 #include <UltrasonicPCF8574.h>
 #include <FlowMeter.h>
@@ -22,78 +24,67 @@ PubSubClient mqtt_client(espClient);
 // PCF8574 initialization
 PCF8574 pcf20(0x20, D2, D1);
 
-// Ultrasonic initialization
-const uint8_t TRIGGER_PIN = 0;
-const uint8_t ECHO_PIN = 1;
-void ultr_sensor_callback(unsigned int current_distance)
+// Creates a json message for publishing to a mqtt topic.
+String createJsonMessage(uint8_t identification, char *description, char *key, unsigned int val)
 {
-    Serial.print("Distance: ");
-    Serial.println(current_distance);
-    //Creates a JSON to send to topic containing
-    //ultr info.
     StaticJsonBuffer<200> jsonBuffer;
     JsonObject &root = jsonBuffer.createObject();
-    root["identification"] = "666";
-    root["description"] = "test from sketch";
-    root["distance"] = current_distance;
+    root["identification"] = identification;
+    root["description"] = description;
+    root[key] = val;
     String message;
     root.printTo(message);
-    Serial.print("JSON generated: ");
-    Serial.println(message);
-    mqtt_client.publish("irrigation-system/sensor/ultrasonic", message.c_str());
+    return message;
 }
-UltrasonicPCF8574 ultr(TRIGGER_PIN, ECHO_PIN, 600, ultr_sensor_callback, pcf20);
 
-// Flow Meter initialization
-const uint8_t flow_signal_pin = D5;
-void flow_meter_callback(unsigned int current_content)
-{
-    static int oldTime = 0;
-    if (millis() - oldTime > 10000)
-    {
-        StaticJsonBuffer<200> jsonBuffer;
-        JsonObject &root = jsonBuffer.createObject();
-        root["identification"] = 666;
-        root["description"] = "tanque vaciado";
-        root["content"] = current_content;
-        oldTime = millis();
-        String message;
-        root.printTo(message);
-        Serial.print("JSON generated: ");
-        Serial.println(message);
+const int ULTRASONICS_SIZE = 2;
+
+// Array of callbacks for ultrasonic sensors.
+void (*ultrasonic_callbacks[ULTRASONICS_SIZE])(unsigned int current_distance){
+    [](unsigned int current_distance) {
+        String message = createJsonMessage(1, "Ultrasonic 1", "distance", current_distance);
+        mqtt_client.publish("irrigation-system/sensor/ultrasonic", message.c_str());
+    },
+    [](unsigned int current_distance) {
+        String message = createJsonMessage(2, "Ultrasonic 2", "distance", current_distance);
+        mqtt_client.publish("irrigation-system/sensor/ultrasonic", message.c_str());
+    }};
+
+// Array of ultrasonic sensors with PCF8574.
+UltrasonicPCF8574 ultras[ULTRASONICS_SIZE] = {
+    {0, 1, 600, ultrasonic_callbacks[0], pcf20},
+    {2, 3, 600, ultrasonic_callbacks[1], pcf20}};
+
+const int FLOW_METERS_SIZE = 2;
+
+// Array of callbacks for flow meter sensors.
+void (*flowm_callbacks[FLOW_METERS_SIZE])(unsigned int current_content) = {
+    [](unsigned int current_content) {
+        String message = createJsonMessage(1, "flow_1", "content", current_content);
         mqtt_client.publish("irrigation-system/sensor/water-flow", message.c_str());
-    }
-}
+    },
+    [](unsigned int current_content) {
+        String message = createJsonMessage(2, "flow_2", "content", current_content);
+        mqtt_client.publish("irrigation-system/sensor/water-flow", message.c_str());
+    }};
 
-FlowMeter flowM1(flow_signal_pin, flow_meter_callback);
+// Array of flow meter sensors.
+FlowMeter flows[FLOW_METERS_SIZE] = {
+    {D5, flowm_callbacks[0]},
+    {D6, flowm_callbacks[1]}};
 
-// Tests the PCF by blinking a LED
-// every second.
-int old_time_test_pcf = 0;
-bool state_test_pcf = true;
-const uint8_t pin_test_pcf = 3;
-
-// Solenoid-valve initialization
-void solenoid_callback(uint8_t state)
-{
-    StaticJsonBuffer<200> jsonBuffer;
-    JsonObject &root = jsonBuffer.createObject();
-    root["identification"] = 666;
-    root["description"] = "electrovalvula 1";
-    root["open"] = state ? true : false;
-    String message;
-    root.printTo(message);
-    Serial.print("JSON generated: ");
-    Serial.println(message);
-    mqtt_client.publish("irrigation-system/actuator/solenoid-valve/get", message.c_str());
-}
-Electrovalvula solenoid1(3, pcf20);
+// SensorManager object that manages
+// the array of FlowMeter and Ultrasonic
+// sensors.
+SensorManager sensors(flows, 2, ultras, 2);
 
 void setup()
 {
     Serial.begin(9600);
     pcf20.begin();
-    flowM1.begin();
+    // Performs initialization for the sensors that
+    // need it.
+    sensors.begin();
 
     delay(10);
     Serial.println();
@@ -136,44 +127,6 @@ void loop()
                 mqtt_client.publish("outTopic", "hello world");
                 // ... and resubscribe
                 mqtt_client.subscribe("inTopic");
-                mqtt_client.subscribe("irrigation-system/actuator/solenoid-valve/set");
-                // Callback for managing the activation/deactivation of a solenoid-valve.
-                mqtt_client.setCallback([](char *topic, uint8_t *payload, unsigned int length) {
-                    String solenoid_topic = "irrigation-system/actuator/solenoid-valve/set";
-                    Serial.println("Mensaje recibido para topic: ");
-                    Serial.println(solenoid_topic);
-                    if (solenoid_topic.equals(topic))
-                    {
-                        StaticJsonBuffer<200> jsonBuffer;
-                        JsonObject &message = jsonBuffer.parseObject(payload);
-                        Serial.println("Mensaje recibido:");
-                        String jsonmessage;
-
-                        message.printTo(jsonmessage);
-                        Serial.println(jsonmessage.c_str());
-
-                        if (solenoid1.getPin() == message["identification"])
-                        {
-                            Serial.println("electrovalvula encontrada.");
-                            if (message["state"] == "open")
-                            {
-                                Serial.println("Abriendo electrovalvula.");
-                                solenoid1.abrir(solenoid_callback);
-                            }
-                            else if (message["state"] == "close")
-                            {
-                                Serial.println("Cerrando electrovalvula.");
-                                solenoid1.cerrar(solenoid_callback);
-                            }
-                        }
-                    }
-                    else
-                    {
-                        Serial.print("Topic: ");
-                        Serial.print(topic);
-                        Serial.println(" not contemplated.");
-                    }
-                });
             }
             else
             {
@@ -186,17 +139,8 @@ void loop()
         }
     }
     mqtt_client.loop();
-    if (millis() - old_time_test_pcf > 10000)
-    {
-        old_time_test_pcf = millis();
-        // As the ultrsonic sensor obtains the distance
-        // parameter directly, is not necessary to handle
-        // it every time.
-        ultr.handle();
-    }
-    // The readings received from flowMeter are more
-    // critical to capture, because it needs the pulses
-    // to calculate the content passed, that's why on
-    // every loop the handle is called.
-    flowM1.handle();
+    // Invokes the handle method for each
+    // one of the sensors managed by the
+    // SensorManager object.
+    sensors.handle();
 }
